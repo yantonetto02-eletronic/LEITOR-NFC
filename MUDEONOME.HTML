@@ -1,0 +1,297 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Sistema Doroti - RFID</title>
+
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+<style>
+
+body {
+  font-family: Arial;
+  background: #eef2f7;
+  text-align: center;
+  padding: 20px;
+}
+
+.container {
+  background: white;
+  max-width: 550px;
+  margin: auto;
+  padding: 20px;
+  border-radius: 15px;
+  box-shadow: 0 3px 12px #ccc;
+}
+
+h2 {
+  color: #17365d;
+}
+
+#conexao {
+  font-weight: bold;
+  color: orange;
+}
+
+#uid {
+  font-size: 28px;
+  font-weight: bold;
+  color: #17365d;
+  margin: 15px;
+}
+
+#status {
+  padding: 18px;
+  border-radius: 10px;
+  font-size: 22px;
+  font-weight: bold;
+  background: #ddd;
+  margin: 15px 0;
+}
+
+.liberado {
+  background: #b9f6ca !important;
+  color: #08752b;
+}
+
+.negado {
+  background: #ffcdd2 !important;
+  color: #b71c1c;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+
+th {
+  background: #17365d;
+  color: white;
+  padding: 10px 5px;
+}
+
+td {
+  padding: 10px 4px;
+  border-bottom: 1px solid #ddd;
+  font-size: 13px;
+}
+
+button {
+  background: #17365d;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 15px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>CONTROLE DE ACESSO RFID</h2>
+
+<p id="conexao">● CONECTANDO...</p>
+
+<hr>
+
+<p>ÚLTIMO CARTÃO IDENTIFICADO</p>
+
+<div id="uid">Aguardando...</div>
+
+<div id="status">
+AGUARDANDO CARTÃO
+</div>
+
+<p id="ultimoHorario">Última leitura: --:--:--</p>
+
+<hr>
+
+<h3>HISTÓRICO DE LEITURAS</h3>
+
+<table>
+
+<thead>
+<tr>
+<th>HORÁRIO</th>
+<th>UID DO CARTÃO</th>
+<th>ACESSO</th>
+</tr>
+</thead>
+
+<tbody id="historico">
+
+<tr>
+<td colspan="3">Nenhuma leitura</td>
+</tr>
+
+</tbody>
+
+</table>
+
+<button onclick="limparHistorico()">
+LIMPAR HISTÓRICO
+</button>
+
+</div>
+
+
+<script>
+
+// TOPICO MQTT
+const topico = "aula-ptic/rfid/esp32-yan-7f3c91";
+
+// CONEXAO MQTT
+const cliente = mqtt.connect(
+  "wss://broker.hivemq.com:8884/mqtt"
+);
+
+// HISTORICO
+let leituras = [];
+
+
+// QUANDO CONECTAR
+cliente.on("connect", function() {
+
+  document.getElementById("conexao").innerHTML =
+    "● CONECTADO";
+
+  document.getElementById("conexao").style.color = "green";
+
+  cliente.subscribe(topico);
+
+});
+
+
+// QUANDO DESCONECTAR
+cliente.on("offline", function() {
+
+  document.getElementById("conexao").innerHTML =
+    "● DESCONECTADO";
+
+  document.getElementById("conexao").style.color = "red";
+
+});
+
+
+// RECEBER MENSAGEM
+cliente.on("message", function(topico, mensagem) {
+
+  let dados = mensagem.toString().split("|");
+
+  let uid = dados[0];
+  let resultado = dados[1];
+
+  let horario = new Date().toLocaleTimeString("pt-BR");
+
+
+  // MOSTRAR UID
+  document.getElementById("uid").innerHTML = uid;
+
+
+  // MOSTRAR RESULTADO
+  let status = document.getElementById("status");
+
+  if(resultado == "LIBERADO") {
+
+    status.innerHTML = "ACESSO LIBERADO";
+    status.className = "liberado";
+
+  } else {
+
+    status.innerHTML = "ACESSO NEGADO";
+    status.className = "negado";
+
+  }
+
+
+  // MOSTRAR HORARIO
+  document.getElementById("ultimoHorario").innerHTML =
+    "Última leitura: " + horario;
+
+
+  // GUARDAR NO HISTORICO
+  leituras.unshift({
+    horario: horario,
+    uid: uid,
+    resultado: resultado
+  });
+
+
+  // MANTER 10 LEITURAS
+  if(leituras.length > 10) {
+    leituras.pop();
+  }
+
+
+  // ATUALIZAR TABELA
+  atualizarHistorico();
+
+});
+
+
+// ATUALIZAR HISTORICO
+function atualizarHistorico() {
+
+  let tabela = document.getElementById("historico");
+
+  tabela.innerHTML = "";
+
+  leituras.forEach(function(leitura) {
+
+    let linha = tabela.insertRow();
+
+    linha.insertCell(0).innerHTML = leitura.horario;
+
+    linha.insertCell(1).innerHTML = leitura.uid;
+
+    let resultado = linha.insertCell(2);
+
+    resultado.innerHTML = leitura.resultado;
+
+    if(leitura.resultado == "LIBERADO") {
+      resultado.style.color = "green";
+    } else {
+      resultado.style.color = "red";
+    }
+
+  });
+
+}
+
+
+// LIMPAR HISTORICO
+function limparHistorico() {
+
+  leituras = [];
+
+  document.getElementById("historico").innerHTML =
+    '<tr><td colspan="3">Nenhuma leitura</td></tr>';
+
+}
+
+
+// ERRO DE CONEXAO
+cliente.on("error", function() {
+
+  document.getElementById("conexao").innerHTML =
+    "● ERRO DE CONEXÃO";
+
+  document.getElementById("conexao").style.color = "red";
+
+});
+
+</script>
+
+</body>
+</html>
